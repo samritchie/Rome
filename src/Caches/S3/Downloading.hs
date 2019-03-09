@@ -26,6 +26,9 @@ import           Types                        hiding (version)
 import           Utils
 import           Xcode.DWARF
 
+import qualified Network.HTTP.Simple          as HTTP
+import qualified Network.HTTP.Client.Conduit  as HTTP
+
 
 
 -- | Retrieves a Framework from an S3 Cache and unzip the contents
@@ -246,7 +249,7 @@ getArtifactFromS3 s3BucketName remotePath artifactName = do
 
 
 
--- | Downloads an artificat stored at a given path from an `S3.BucketName`.
+-- | Downloads an artifact stored at a given path from an `S3.BucketName`.
 downloadBinary
   :: S3.BucketName
   -> FilePath
@@ -295,4 +298,25 @@ downloadBinary s3BucketName objectRemotePath objectName = do
         let a = if diffGreaterThan1MB then len else lastLen
         loop t len a
       )
+
+-- | Downloads an artifact stored at a given path from an `S3.BucketName` via HTTP
+downloadBinaryUnauthenticated
+  :: S3.BucketName
+  -> FilePath
+  -> FilePath
+  -> ReaderT (AWS.Env, Bool) IO LBS.ByteString
+downloadBinaryUnauthenticated s3BucketName objectRemotePath objectName = do
+  (_, verbose) <- ask
+  let sayFunc = if verbose then sayLnWithTime else sayLn
+  when verbose
+    $  sayFunc
+    $  "Started downloading "
+    <> objectName
+    <> " from: "
+    <> objectRemotePath
+  req <- HTTP.parseRequest $ concat ["http://", show s3BucketName, ".s3.amazonaws.com/", show objectRemotePath]
+  response <- HTTP.httpLBS req
+  sayFunc $ "Downloaded " <> objectName <> " from: " <> objectRemotePath
+  return $ HTTP.responseBody response
+  
 
